@@ -45,6 +45,25 @@ async def handle_commands(queue, conn):
                     RTC_TOPIC["SPORT_MOD"],
                     {"api_id": SPORT_CMD["Move"], "parameter": {"x": x, "y": y, "z": 0}}
                 )
+            if command == "Sit":
+                print("Performing Sit")
+                await conn.datachannel.pub_sub.publish_request_new(
+                    RTC_TOPIC["SPORT_MOD"],
+                    {"api_id": SPORT_CMD["Sit"]}
+                )
+            if command == "StandUp":
+                print("Performing StandUp")
+                await conn.datachannel.pub_sub.publish_request_new(
+                    RTC_TOPIC["SPORT_MOD"],
+                    {"api_id": SPORT_CMD["StandUp"]}
+                )
+            if command == "Stretch":
+                print("Performing Stretch")
+                await conn.datachannel.pub_sub.publish_request_new(
+                    RTC_TOPIC["SPORT_MOD"],
+                    {"api_id": SPORT_CMD["Stretch"]}
+                )
+
         except ValueError as e:
             print(f"Error processing command: {e}")
         finally:
