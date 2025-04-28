@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Webcam Stream Test</title>
+</head>
+<body>
+    <h1>Webcam Stream</h1>
+    <video id="video" autoplay playsinline></video>
+
+    <script>
+        var pc = new RTCPeerConnection();
+        var video = document.getElementById('video');
+
+        pc.ontrack = function(event) {
+            video.srcObject = event.streams[0];
+        };
+
+        pc.addTransceiver('video', {direction: 'recvonly'});
+        pc.createOffer().then(function(offer) {
+            return pc.setLocalDescription(offer);
+        }).then(function() {
+            // Send the offer to the Python server
+            fetch('/offer', {
+                method: 'POST',
+                body: JSON.stringify({
+                    sdp: pc.localDescription.sdp,
+                    type: pc.localDescription.type
+                }),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }).then(function(response) {
+                return response.json();
+            }).then(function(answer) {
+                return pc.setRemoteDescription(answer);
+            }).catch(function(e) {
+                console.error(e);
+            });
+        });
+    </script>
+</body>
+</html>
