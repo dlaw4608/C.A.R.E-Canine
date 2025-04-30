@@ -80,9 +80,14 @@ async def read_microbit_serial(queue, port='/dev/ttyACM0', baudrate=9600):
                 while '\n' in buffer:
                     line,buffer = buffer.split("\n",1)
                     if ',' in line:
-                        command, value = line.split(',', 1)                    
-                        print(f"Received from Serial: Command: {command.strip()}, Value: {value.strip()}")
-                        await queue.put((command.strip(),value.strip()))
+                        command, value = line.split(',', 1)
+                        x_val,y_val,z_val = value.split(',', 2)
+                        move_value = x_val,y_val,z_val
+                        print(f"Received from Serial: Command: {command.strip()}, X Value: {x_val.strip()}, Y Value: {y_val.strip()}, Z Value: {z_val.strip()}")
+                        await queue.put((command.strip(), x_val.strip(), y_val.strip(), z_val.strip()))
+                    elif line.strip():
+                        await queue.put((line.strip(), None, None, None),)
+                        print(f"Received Standalone Command: {line.strip()}")
                     else:
                         print(f"Invalid Line: {line}")
     except Exception as e:
@@ -92,23 +97,74 @@ async def read_microbit_serial(queue, port='/dev/ttyACM0', baudrate=9600):
 
 async def handle_commands(queue, conn):
     while True:
-        command, value = await queue.get()  
-        print(f"Handling command: {command}, with value: {value}")
+        command, x_val, y_val, z_val = await queue.get()
+        print(f"Handling command: {command}, x: {x_val}, y: {y_val}, z: {z_val}")
         try:
             if command == "Move":
-                x_value = float(value)
-                #y_value = float(y_val)
-                x_move = 0.5 if x_value >= 120 else -0.5 if x_value <= -120 else 0
-                #y_move = 0.5 if y_value >= 120 else -0.5 if y_value <= -120 else 0
-                print(f"Executing Move command with x: {x_move}")
+                x_value = float(x_val)
+                y_value = float(y_val)
+                z_value = float(z_val)
+
+                print(f"Executing Move command with x: {x_value}, y: {y_value}, z: {z_value}")
                 await conn.datachannel.pub_sub.publish_request_new(
                     RTC_TOPIC["SPORT_MOD"],
-                    {"api_id": SPORT_CMD["Move"], "parameter": {"x": x_move, "y": 0, "z": 0}}
+                    {"api_id": SPORT_CMD["Move"], "parameter": {"x": x_value, "y": y_value, "z": z_value}}
                 )
+            elif command in {"Sit", "RiseSit", "Stretch","Wallow","StandUp","Dance1","Dance2","FrontJump","FrontPounce"}:
+                print(f"Performing {command}")
+                await conn.datachannel.pub_sub.publish_request_new(
+                    RTC_TOPIC["SPORT_MOD"],
+                    {"api_id": SPORT_CMD[command]}
+                )
+            elif command in {"normal", "ai"}:
+                print(f"Switching motion mode to '{command}'...")
+                await conn.datachannel.pub_sub.publish_request_new(
+                    RTC_TOPIC["MOTION_SWITCHER"],
+                    {
+                        "api_id": 1002,  
+                        "parameter": {"name": command}
+                    }
+                )
+            elif command == "Handstand":
+                print("Switching to Hanstand Mode...")
+                await conn.datachannel.pub_sub.publish_request_new(
+                    RTC_TOPIC["SPORT_MOD"],
+                    {
+                        "api_id": SPORT_CMD["StandOut"],
+                        "parameter": {"data": True}
+                        }
+                    )
+            elif command == "StandDown":
+                print("Switching to StandUp Mode...")
+                await conn.datachannel.pub_sub.publish_request_new(
+                    RTC_TOPIC["SPORT_MOD"],
+                    {
+                        "api_id": SPORT_CMD["StandOut"],
+                        "parameter": {"data": False}
+                        }
+                    )
+            elif command == "ObstacleOn":
+                print("Enabling obstacle avoidance...")
+                await conn.datachannel.pub_sub.publish_request_new(
+                    RTC_TOPIC["OBSTACLES_AVOID"],
+                    {
+                        "api_id": 1001,
+                        "parameter": {"enable":True}
+                        })
+                
+            elif command == "ObstacleOff":
+                print("Disabling obstacle avoidance...")
+                await conn.datachannel.pub_sub.publish_request_new(
+                    RTC_TOPIC["OBSTACLES_AVOID"],
+                    {
+                        "api_id": 1001,
+                        "parameter": {"enable":False}
+                        })
         except ValueError as e:
             print(f"Error processing command: {e}")
         finally:
             queue.task_done()
+
 
 async def main():
     queue = asyncio.Queue()
